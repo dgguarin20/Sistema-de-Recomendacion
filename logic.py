@@ -11,7 +11,10 @@ from sklearn import preprocessing
 from sklearn.metrics import confusion_matrix, classification_report,make_scorer,recall_score
 from sklearn.model_selection import ShuffleSplit,GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
-
+from copy import deepcopy
+from numpy import ndarray
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
 
 def cargarData():
     externalInstitutionsDF = pd.read_csv("externalInstitutions.csv",sep=',')
@@ -25,10 +28,10 @@ def cargarData():
     unisClase1 = pd.read_excel("unisClase1.xlsx")
     cupos = pd.read_excel("cupos.xlsx")
     viajesExitosos = pd.read_excel('viajeExitosos.xlsx')
+    staywishes = pd.read_csv("staywishesoutgoinglast.csv",sep=',')
+    staywishes['Form'].fillna("")
     
-    return (externalInstitutionsDF,stayOpportunityDF,relationInstitution,programasUniandes,staysAPI,staysWishesAPI,seatsDF,unisClase0,unisClase1,cupos,viajesExitosos)
-    
-
+    return (externalInstitutionsDF,stayOpportunityDF,relationInstitution,programasUniandes,staysAPI,staysWishesAPI,seatsDF,unisClase0,unisClase1,cupos,viajesExitosos, staywishes)
     
 def dataPrepInic(externalInstitutionsDF,stayOpportunityDF,relationInstitution,programasUniandes):
     stayOpportunityDF = stayOpportunityDF.filter(['relation.level','relation.id', 'relation.name','relation.status.id','relation.relation_type.id','relation.course','relation.direction.id'])
@@ -99,7 +102,7 @@ def dataPrepInic(externalInstitutionsDF,stayOpportunityDF,relationInstitution,pr
         columnDPClean.append(''.join(ans))
 
     SOI['relation.course'] = columnDPClean
-
+    SOI2 = deepcopy(SOI)
     del SOI['relation.level']
     del SOI['relation.name']
     del SOI['relation.status.id']
@@ -129,21 +132,33 @@ def dataPrepInic(externalInstitutionsDF,stayOpportunityDF,relationInstitution,pr
         dificultadI.append(difi)
 
     SOI['Dificultad SO'] = dificultadI
-    return SOI
-
+    SOI2['Dificultad SO'] = dificultadI
+    return SOI, SOI2
 
 def over4(gpaO5):
     return ((gpaO5*4)/5)
 
-def validUniversitites(SOI,country,programa,gpa,peso,seats,lenguajes):
+def validUniversitites(SOI,country,programa,gpa,peso,seats,lenguajes, SOI2):
    
     #country, gpa, programa, peso, seats=  
     lenguajes.append('No language requirement')
     gpa = over4(gpa)
-    filteredInstitutionsDF = SOI[(SOI['Country'] == country) & (SOI['Minimum GPA/4'] <= gpa) & (SOI['relation.course'].str.contains(programa))  & (SOI['Language requirement 1'].isin(lenguajes))]
-    print('Esto son las universidades filtradas')
-    print(filteredInstitutionsDF)
-    return filteredInstitutionsDF, gpa, peso, seats
+    if(country == "all"):
+        print("siiiii")
+        filteredInstitutionsDF = SOI[(SOI['Minimum GPA/4'] <= gpa) & (SOI['relation.course'].str.contains(programa))  & (SOI['Language requirement 1'].isin(lenguajes))]
+    else:                                      
+        filteredInstitutionsDF = SOI[(SOI['Country'] == country) & (SOI['Minimum GPA/4'] <= gpa) & (SOI['relation.course'].str.contains(programa))  & (SOI['Language requirement 1'].isin(lenguajes))]
+    
+    if(country == "all"):
+        print("siiiii")
+        filteredInstitutionsDF2 = SOI2[(SOI2['Minimum GPA/4'] <= gpa) & (SOI2['relation.course'].str.contains(programa))  & (SOI2['Language requirement 1'].isin(lenguajes))]
+    else:                                      
+        filteredInstitutionsDF2 = SOI2[(SOI['Country'] == country) & (SOI2['Minimum GPA/4'] <= gpa) & (SOI2['relation.course'].str.contains(programa))  & (SOI2['Language requirement 1'].isin(lenguajes))]
+    
+    #print('Esto son las universidades filtradas')
+    
+    #print(filteredInstitutionsDF)
+    return filteredInstitutionsDF, gpa, peso, seats, filteredInstitutionsDF2
 
 
 
@@ -403,7 +418,7 @@ def elModeloKNN(dataForModel,ins,prom,peso,seats,unisClase0,unisClase1):
         details = tTrain1.apply(lambda x : True if x['Institution'] == u else False, axis = 1)
         count = len(details[details == True].index)
         if count < 10:
-            print('--- Entro a caso poco ---')
+            #print('--- Entro a caso poco ---')
             # Tengo que poblar
             if u in unisName0:
                 print('-- 0 tTrain1 (Antes) --')
@@ -525,11 +540,13 @@ def KNN(dataForModel,ins,viajesE,prom,peso,seats,unisClase0,unisClase1):
     #train=dataForModel.sample(frac=0.8,random_state=200)
     #test=dataForModel.drop(train.index)
     #scoreres = {'recall_score': make_scorer(recall_score)}
+    
     puntajes = {}
     unisCero = []
     unisUno = []
     accuracys = []
     for u in ins:
+        revisar = 1
         datosTemp = dataForModel
         #tTrain2 = train
         entra = False
@@ -582,70 +599,78 @@ def KNN(dataForModel,ins,viajesE,prom,peso,seats,unisClase0,unisClase1):
 
             # SMOTE
             oversample = SMOTE()
-            xTrain,yTrain = oversample.fit_resample(xTrain,yTrain)
-            counter = Counter(yTrain)
-            print('Esto es el nuevo counter')
-            print(counter)
-
-
-            scalar = preprocessing.StandardScaler().fit(xTrain)
-            xTrain = scalar.transform(xTrain)
-            #xTest = scalar.transform(xTest)
-
-            # Creo modelo inicial
-            modeloEuc = KNeighborsClassifier()
-            modeloEuc.fit(xTrain, yTrain)
-
-            # Hayo el k que me maximize el recall
-            skf = ShuffleSplit(n_splits=10)
-            if minimum[0] == 1:
-                k_range = list(range(1, 2))
-                entra = True
-
-            elif minimum[0] == 0:
-                pass
-                #if minimum[1] == '0':
-                    #unisCero.append({u:0})
-                #else:
-                    #unisUno.append({u:0})
+            try:
+                xTrain,yTrain = oversample.fit_resample(xTrain,yTrain)
+            except:
+                print("error---------")
+                print(u)
+                revisar = 2
+            if(revisar == 2):
+                print("no toma esta uni")
             else:
-                k_range = list(range(1, minimum[0]))
-                entra = True
-                
-            if entra:
-                print('Esta entrando a buscar el K')
-                param_grid = dict(n_neighbors=k_range)
-                #random_search = GridSearchCV(modeloEuc, cv=skf, scoring=scoreres,param_grid=param_grid, verbose= 0,refit='recall_score')
-                grid_search = GridSearchCV(modeloEuc, cv=skf,param_grid=param_grid, verbose= 0)
-                grid_search.fit(xTrain,yTrain)
+                counter = Counter(yTrain)
+                print('Esto es el nuevo counter')
+                print(counter)
 
-                #print('Recall score - ' + str(random_search.score(xTrain,yTrain)))
-                #recalls.append(random_search.score(xTrain,yTrain))
-                #print('-- SCORE --')
-                #print(random_search.score(xTrain,yTrain))
-                #print('Test score - ' + str(random_search.score(xTest,yTest)))
 
-                # Obtengo k
-                k = grid_search.best_params_["n_neighbors"]
-                accuracy = grid_search.best_score_
-                accuracys.append(accuracy)
-                print(f'Esto es k: {k}')
-                print(f'Esto es accuracy sin SMOTE: {accuracy}')
-                modeloEuc = KNeighborsClassifier(n_neighbors=k)
+                scalar = preprocessing.StandardScaler().fit(xTrain)
+                xTrain = scalar.transform(xTrain)
+                #xTest = scalar.transform(xTest)
+
+                # Creo modelo inicial
+                modeloEuc = KNeighborsClassifier()
                 modeloEuc.fit(xTrain, yTrain)
 
-                lab = modeloEuc.predict([[prom,seats,peso]])[0]
-                print(f'Este es el label que le predijo {lab}')
-                if lab == 0:
-                    print(modeloEuc.predict_proba([[prom,seats,peso]]))
-                    prob = modeloEuc.predict_proba([[prom,seats,peso]])[0][0]
-                    print(f'Esta es la prob {prob}')
-                    unisCero.append({u:prob})
+                # Hayo el k que me maximize el recall
+                skf = ShuffleSplit(n_splits=10)
+                if minimum[0] == 1:
+                    k_range = list(range(1, 2))
+                    entra = True
+
+                elif minimum[0] == 0:
+                    pass
+                    #if minimum[1] == '0':
+                        #unisCero.append({u:0})
+                    #else:
+                        #unisUno.append({u:0})
                 else:
-                    print(modeloEuc.predict_proba([[prom,seats,peso]]))
-                    prob = modeloEuc.predict_proba([[prom,seats,peso]])[0][1]
-                    print(f'Esta es la prob {prob}')
-                    unisUno.append({u:prob})
+                    k_range = list(range(1, minimum[0]))
+                    entra = True
+
+                if entra:
+                    print('Esta entrando a buscar el K')
+                    param_grid = dict(n_neighbors=k_range)
+                    #random_search = GridSearchCV(modeloEuc, cv=skf, scoring=scoreres,param_grid=param_grid, verbose= 0,refit='recall_score')
+                    grid_search = GridSearchCV(modeloEuc, cv=skf,param_grid=param_grid, verbose= 0)
+                    grid_search.fit(xTrain,yTrain)
+
+                    #print('Recall score - ' + str(random_search.score(xTrain,yTrain)))
+                    #recalls.append(random_search.score(xTrain,yTrain))
+                    #print('-- SCORE --')
+                    #print(random_search.score(xTrain,yTrain))
+                    #print('Test score - ' + str(random_search.score(xTest,yTest)))
+
+                    # Obtengo k
+                    k = grid_search.best_params_["n_neighbors"]
+                    accuracy = grid_search.best_score_
+                    accuracys.append(accuracy)
+                    print(f'Esto es k: {k}')
+                    print(f'Esto es accuracy sin SMOTE: {accuracy}')
+                    modeloEuc = KNeighborsClassifier(n_neighbors=k)
+                    modeloEuc.fit(xTrain, yTrain)
+
+                    lab = modeloEuc.predict([[prom,seats,peso]])[0]
+                    print(f'Este es el label que le predijo {lab}')
+                    if lab == 0:
+                        print(modeloEuc.predict_proba([[prom,seats,peso]]))
+                        prob = modeloEuc.predict_proba([[prom,seats,peso]])[0][0]
+                        print(f'Esta es la prob {prob}')
+                        unisCero.append({u:prob})
+                    else:
+                        print(modeloEuc.predict_proba([[prom,seats,peso]]))
+                        prob = modeloEuc.predict_proba([[prom,seats,peso]])[0][1]
+                        print(f'Esta es la prob {prob}')
+                        unisUno.append({u:prob})
 
     puntajes[0] = unisCero
     puntajes[1] = unisUno 
@@ -653,9 +678,6 @@ def KNN(dataForModel,ins,viajesE,prom,peso,seats,unisClase0,unisClase1):
     #avgRecall = averageModelo(accuracys)
 
     return (puntajes[1])
-
-
-
 
     
 
@@ -741,10 +763,17 @@ def sacarPuestos(programa):
     temp = list(registro['Puestos Promedio'])
     return temp[0]
 
-def man(pCountry,pPrograma,pGpa,pPeso,pSeats,pLenguajes):
-    externalInstitutionsDF,stayOpportunityDF,relationInstitution,programasUniandes,staysAPI,staysWishesAPI,seatsDF,unisClase0,unisClase1,cupos,viajesE = cargarData()
-    SOI = dataPrepInic(externalInstitutionsDF,stayOpportunityDF,relationInstitution,programasUniandes)
-    filteredInstitutionsDF,gpa,peso,seats = validUniversitites(SOI,pCountry,pPrograma,pGpa,pPeso,pSeats,pLenguajes)
+def man(pCountry,pPrograma,pGpa,pPeso,pSeats,pLenguajes, ptipo):
+    externalInstitutionsDF,stayOpportunityDF,relationInstitution,programasUniandes,staysAPI,staysWishesAPI,seatsDF,unisClase0,unisClase1,cupos,viajesE, staywishes = cargarData()
+    SOI, SOI2 = dataPrepInic(externalInstitutionsDF,stayOpportunityDF,relationInstitution,programasUniandes)
+    print("----------")
+    print(SOI.columns.values)
+    print("-----------")
+    filteredInstitutionsDF,gpa,peso,seats,filteredInstitutionsDF2 = validUniversitites(SOI,pCountry,pPrograma,pGpa,pPeso,pSeats,pLenguajes, SOI2)
+    print("-----------")    
+    print("-----------")    
+    print("-----------")    
+    print(filteredInstitutionsDF2)
     #print(filteredInstitutionsDF)
     t = prepDataForModel(filteredInstitutionsDF,staysAPI,staysWishesAPI,seatsDF,cupos)
     dataForModel = t[0]
@@ -755,6 +784,11 @@ def man(pCountry,pPrograma,pGpa,pPeso,pSeats,pLenguajes):
     #print(institutions)
     
     universidadesPrediccion = KNN(dataForModel,institutions,viajesE,gpa,peso,seats,unisClase0,unisClase1)
+    print("-----------")    
+    print("-----------")    
+    print("-----------")  
+    print(universidadesPrediccion)
+    F2, SMILE, CINDA = validarTipo(filteredInstitutionsDF2, universidadesPrediccion)
     #print(universidadesPrediccion,avgRecall)
     r = top4(universidadesPrediccion)
     contenedores = []
@@ -770,10 +804,372 @@ def man(pCountry,pPrograma,pGpa,pPeso,pSeats,pLenguajes):
 
     print(f'Las 3 universidades a la que es más probable entrar son {r}')
     #print(f'Con un recall: {avg}')
-    return r,contenedores
+    return r,contenedores, filteredInstitutionsDF2, universidadesPrediccion, staywishes, SMILE, CINDA, F2
+
+def validarTipo(FIDF2, universidadesPrediccion):
+    print("aaaaa")
+    nombres = []
+    for i in range(0, len(universidadesPrediccion)):
+        nombres.append(list(universidadesPrediccion[i].keys())[0])
+    print(len(nombres))
+    nuevoFID = FIDF2[(FIDF2["Name"].isin(nombres)) &(FIDF2["relation.name"].str.contains("Teaching") == False) & (FIDF2["relation.name"].str.contains("Proyecto de Grado") == False) & (FIDF2["relation.name"].str.contains("Double") == False)&(FIDF2["relation.name"].str.contains("Faculty") == False)]
+    print(len(nuevoFID))
+    print(nuevoFID.pivot_table(columns=['relation.name'], aggfunc='size'))
+    #nuevo = nuevoFID[nuevoFID["Name"]=="Pontificia Universidad Católica de Chile"]
+
+    #Separar por CINDA
+    CINDAFID = nuevoFID[nuevoFID["relation.name"].str.contains("CINDA")]
+    
+    #Separar por SMILE
+    SMILDFID = nuevoFID[nuevoFID["relation.name"].str.contains("SMILE")]
+    
+    #Los demas
+    
+    restFID = nuevoFID[(nuevoFID["relation.name"].str.contains("SMILE") == False) & (nuevoFID["relation.name"].str.contains("CINDA") == False) ]
+    
+    return restFID, SMILDFID, CINDAFID
+    
+def guardarDatos(programa, promedio, lenguajes, guardar):
+    if guardar == []:
+        guardarRetorno = ["dg.guarin20@uniandes.edu.co", programa, promedio, lenguajes, []]
+    else:
+        guardarRetorno = ["dg.guarin20@uniandes.edu.co", programa, promedio, lenguajes, guardar[4]]
+    return guardarRetorno
 
 
+def guardarUni(universidad, porcentaje, guardar, FIDF2):
+    uni = FIDF2[(FIDF2["Name"]==universidad) & (FIDF2["relation.name"].str.contains("Exchange"))]
+    unis = guardar[4]
+    uni = uni[['relation.name','Country', 'City', 'Name', 'Institution: ID', 'Language requirement 1', 'Language requirement 2',  'Minimum GPA/4', 'Dificultad SO']]
+    uni['Porcentaje'] = porcentaje
+    uni["Minimum GPA/4"].fillna("0", inplace = True)
+    uni["Language requirement 1"].fillna("No language requirement", inplace = True)
+    uni["Language requirement 2"].fillna("No language requirement", inplace = True)
+    unis.append(uni)
+    guardar[4]= unis
+    return guardar
 
+def alistarDatos(FIDF2, universidadesPrediccion):
+    nombres = []
+    promedio = []
+    for i in range(0, len(universidadesPrediccion)):
+        nombres.append(list(universidadesPrediccion[i].keys())[0])
+    print(promedio)
+    unis = FIDF2[(FIDF2["Name"].isin(nombres)) &(FIDF2["relation.name"].str.contains("Teaching") == False) & (FIDF2["relation.name"].str.contains("Proyecto de Grado") == False) & (FIDF2["relation.name"].str.contains("Double") == False)&(FIDF2["relation.name"].str.contains("Faculty") == False)]
+    unis = unis[['relation.name','Country', 'City', 'Name', 'Institution: ID', 'Language requirement 1', 'Language requirement 2', 'Language cerf score 2', 'Minimum GPA/4', 'Dificultad SO']]
+    a = []
+    
+    for i in range(0, len(unis)):
+        name = unis.iloc[i]['Name']
+        promedio = 0
+        for j in range(0, len(universidadesPrediccion)):
+            valor = list(universidadesPrediccion[j].keys())[0]
+            if(valor == name):
+                promedio = universidadesPrediccion[j][valor]
+                j = 10000
+        a.append(promedio) 
+    unis['Porcentaje'] = a
+    
+    junto = []
+    for i in range(0, len(unis)):
+        country = unis.iloc[i]['Country']
+        city = unis.iloc[i]['City']
+        name = unis.iloc[i]['Name']
+        language1 = unis.iloc[i]['Language requirement 1']
+        language2 = unis.iloc[i]['Language requirement 2']
+        gpa = unis.iloc[i]['Minimum GPA/4']
+        gpa2 = str(gpa)
+        dificultad = unis.iloc[i]['Dificultad SO']
+        if(dificultad >= 0.75):
+            dm = "Dificil"
+        elif((dificultad < 0.75) & (dificultad >= 0.25) ):
+            dm = "MedioDificil"
+        else:
+            dm = "Facil"
+        porcentaje = unis.iloc[i]['Porcentaje']
+        if( porcentaje>= 0.75):
+            pm = "Alto"
+        elif((porcentaje< 0.75) & (porcentaje>=0.25) ):
+            pm = "Medio"
+        else:
+            pm = "Bajo"
+            
+        message = "Country: " + country + " City: "+ city + " Uni Name: "+ name + " Language requirement 1: " + language1 + " Language requirement 2: "+ language2 + " GPA: " + gpa2 + " Dificultad: " + dm + " Porcentaje: " + pm
+        junto.append(message)
+    unis['Mensaje'] = junto
+    return unis
 
+def get_recommendation(lista, cosine_sim, indices, unis):
+    valores = []
+    for i in range(0, len(lista)):
+        l = lista.iloc[i]
+        nombre = l['Name']
+        try:
+            indx = indices[nombre]
+            example = np.int64(40)
+
+            if type(indx) == type(example):
+                dictio = {nombre : indx}
+                indice = pd.Series(dictio)
+            else:
+                indice = indx
+            sim_score = enumerate(cosine_sim[indice][0])
+            sim_score = sorted(sim_score, key= lambda x:x[1], reverse = True)
+            sim_index = [l[0] for l in sim_score]
+            valor = unis.iloc[sim_index]
+    
+            valores.append(valor)
+        except:
+            print("error")
+        
+    return valores
+def definirElGuardado(guarda):
+    g = guarda[4]
+    guardaN = []
+    guardaR = []
+    guardaP = []
+    for i in range(0, len(g)):
+        print(type(g[i]))
+        guardaN.append(g[i]['Name'].values[0])
+        guardaR.append(g[i]['relation.name'].values[0])
+        guardaP.append(g[i]['Porcentaje'].values[0])
+    return guardaN, guardaR, guardaP
+    
+def organizar(recomendacion, guarda):
+    lista = recomendacion[0][:10]
+   
+    for i in range(1, len(recomendacion)):
+        r = recomendacion[i]
+        if( i == 1):
+            l = pd.concat([lista, r[:10]])
+        else:
+            l = pd.concat([l, r[:10]])
+    
+    duplicado = l.pivot_table(columns=['Name','relation.name'], aggfunc='size')
+    llaves = duplicado.keys()
+    a = []
+    nombres = []
+    relations = []
+    porcentajes = []
+    for i in range(0, len(llaves)):
+        nombre, relation = llaves[i]
+        porcentaje = l['Porcentaje'][(l['Name']==nombre)  & (l['relation.name']==relation)]
+
+        porcentajes.append(porcentaje.values[0])
+        nombres.append(nombre)
+        relations.append(relation)
+        a.append(duplicado[llaves[i]])
+    
+    df = pd.DataFrame()
+    df['Duplicado'] = a
+    df['Nombre'] = nombres
+    df['relation'] = relations
+    df['Porcentaje'] = porcentajes
+    df2 = df.sort_values(by=['Duplicado'], ascending=False)
+    
+    g= guarda[4]
+    
+    for i in range(0, len(g)):
+        name = g[i]['Name'].values[0]
+        df2 = df2[df2.Nombre != name]
+    
+    return df2
+    
+def probabilidad(porcentaje):
+    contenedores = []
+    for prob in porcentaje:
+        if prob >= 0 and prob < 0.3:
+            contenedores.append('Baja')
+        elif prob >= 0.3 and prob < 0.7:
+            contenedores.append('Media')
+        else:
+            contenedores.append('Alta')
+    return contenedores   
+    
+def SistemRecomendacionContent(unis, guarda):
+    td = TfidfVectorizer(stop_words="english")
+
+#for i in range(0, len(columnas)):
+ #   print(unis[columnas[i]].unique()) 
+
+    unis["Minimum GPA/4"].fillna("0", inplace = True)
+    unis["Language requirement 1"].fillna("No language requirement", inplace = True)
+    unis["Language requirement 2"].fillna("No language requirement", inplace = True)
+    unis["relation.name"].drop
+    td_matrix = td.fit_transform(unis['Mensaje'])
+    cosine_sim = linear_kernel(td_matrix, td_matrix)
+    lista = guarda[4]
+    ind = [x for x in range(0, len(unis))]
+    indices = pd.Series(ind, index=unis['Name']).drop_duplicates()
+    recomendacion = get_recommendation(lista, cosine_sim, indices, unis)
+    return recomendacion 
+
+def SistemaRecomendacionCollab(staywishes, guarda, unis):
+    wishes = staywishes[staywishes['Form'].str.contains("Outgoing", na=False)]
+    wishes = wishes[['Institution','Person: ID','Status selection', 'Stay: Home - Degree programme']]
+
+    personas = wishes['Person: ID'].unique()
+    personInst = []
+    for i in range(0, len(personas)):
+        v = wishes[wishes['Person: ID']== personas[i]]
+        institutos = v['Institution'].values
+        status = v['Status selection'].values
+        degree = v['Stay: Home - Degree programme'].unique()[0]
+        if(len(institutos)>1):
+            unir = [personas[i], institutos, status, degree, 0]
+            personInst.append(unir)
+
+    bachelor = guarda[1]
+    institutosg = []
+    for j in range(0, len(guarda[4])):
+        institutosg.append(guarda[4][j]['Name'].values[0])
+
+    indexes = []
+    for i in range(0, len(personInst)):
+            for j in range(0, len(institutosg)):
+                for k in range(0, len(personInst[i][1])):
+                    if((institutosg[j] == personInst[i][1][k])):
+                        indexes.append(i)
+                    
+    personDegree = []
+    for i in range(0, len(indexes)):
+        if(personInst[indexes[i]][3]==bachelor):
+            personInst[indexes[i]][4] += 1 
+        personDegree.append(personInst[indexes[i]])
+        
+    differentesUni = []
+    for i in range(0, len(personDegree)):
+        un = personDegree[i][1]
+        for j in range(0, len(un)):
+            if((un[j] in institutosg)== False):
+                if((un[j] in differentesUni)==False):
+                    differentesUni.append(un[j])
+    print(differentesUni)
+    personUni = []
+    personUni2 = []
+    for i in range(0, len(differentesUni)):
+        suma = 0
+        for j in range(0, len(personDegree)):
+            if(differentesUni[i] in personDegree[j][1]):
+                suma += 1
+                suma += personDegree[j][4]
+        personUni.append(differentesUni[i])
+        personUni2.append(suma)
+    df = pd.DataFrame()
+    df['Uni'] = personUni
+    df['valor'] = personUni2
+    df2 = df.sort_values(by=['valor'], ascending=False)
+    percent = []
+    for i in range(0, len(df2)):
+        universidad = unis[unis['Name']==df2['Uni'][i]]
+        if(len(universidad)==0):
+            percent.append(0)
+        else:
+            p = universidad['Porcentaje'].values
+            print(p)
+            percent.append(p[0])
+
+    df2['Porcentaje']=percent
+    print(type(percent[0]))
+    df3 = df2.sort_values(by=['Porcentaje'], ascending = False)
+    return df3
+
+def alistarDatos2(FIDF2, universidadesPrediccion, lenguaje):
+    nombres = universidadesPrediccion["Uni"].to_numpy()
+    porcentaje  = universidadesPrediccion["Porcentaje"].to_numpy()
+    nuevoFID = FIDF2[(FIDF2["Name"].isin(nombres)) &(FIDF2["relation.name"].str.contains("Teaching") == False) & (FIDF2["relation.name"].str.contains("Proyecto de Grado") == False) & (FIDF2["relation.name"].str.contains("Double") == False)&(FIDF2["relation.name"].str.contains("Faculty") == False)]
+    unis = nuevoFID[(nuevoFID["relation.name"].str.contains("Confusio") == False)  & (nuevoFID["relation.name"].str.contains("Faculty") == False) & (nuevoFID["relation.name"].str.contains("Staff") == False)& (nuevoFID["relation.name"].str.contains("Master") == False) 
+    & (nuevoFID["relation.name"].str.contains("phd") == False) & (nuevoFID["relation.name"].str.contains("Co-supervision") == False)
+    & (nuevoFID["relation.name"].str.contains("Co-tutelle") == False) & (nuevoFID["relation.name"].str.contains("Administrative Staff") == False)
+    & (nuevoFID["relation.name"].str.contains("Freemover") == False) & (nuevoFID["relation.name"].str.contains("Participation in events") == False)
+    & (nuevoFID["relation.name"].str.contains("Proyecto de Grado") == False) & (nuevoFID["relation.name"].str.contains("Research Agreement") == False)
+    & (nuevoFID["relation.name"].str.contains("Scholarship") == False) & (nuevoFID["relation.name"].str.contains("Sigueme") == False)
+    &(nuevoFID["relation.name"].str.contains("Teaching Assistant") == False) & (nuevoFID["relation.name"].str.contains("Test-framework") == False)
+    & (nuevoFID["relation.name"].str.contains("Program Master") == False)]
+    
+    
+    unis = unis[['relation.name','Country', 'City', 'Name', 'Institution: ID', 'Language requirement 1', 'Language requirement 2', 'Language cerf score 2', 'Minimum GPA/4', 'Dificultad SO']]
+    a = []
+    
+    for i in range(0, len(unis)):
+        name = unis.iloc[i]['Name']
+        for j in range(0, len(nombres)):
+            if(nombres[j] == name):
+                a.append(porcentaje[j])
+         #   valor = list(universidadesPrediccion[j].keys())[0]
+          #  if(valor == name):
+           #     promedio = universidadesPrediccion[j][valor]
+            #    j = 10000
+        #a.append(promedio) 
+  
+    unis['Porcentaje'] = a
+    
+    junto = []
+    for i in range(0, len(unis)):
+        country = unis.iloc[i]['Country']
+        city = unis.iloc[i]['City']
+        name = unis.iloc[i]['Name']
+        language1 = unis.iloc[i]['Language requirement 1']
+        language2 = unis.iloc[i]['Language requirement 2']
+        gpa = unis.iloc[i]['Minimum GPA/4']
+        gpa2 = str(gpa)
+        dificultad = unis.iloc[i]['Dificultad SO']
+        if(dificultad >= 0.75):
+            dm = "Dificil"
+        elif((dificultad < 0.75) & (dificultad >= 0.25) ):
+            dm = "MedioDificil"
+        else:
+            dm = "Facil"
+        porcentaje = unis.iloc[i]['Porcentaje']
+        if( porcentaje>= 0.75):
+            pm = "Alto"
+        elif((porcentaje< 0.75) & (porcentaje>=0.25) ):
+            pm = "Medio"
+        else:
+            pm = "Bajo"
+            
+        message = "Country: " + country + " City: "+ city + " Uni Name: "+ name + " Language requirement 1: " + language1 + " Language requirement 2: "+ language2 + " GPA: " + gpa2 + " Dificultad: " + dm + " Porcentaje: " + pm
+        junto.append(message)
+    unis['Mensaje'] = junto
+    unisRetorno = unis.sort_values(by=["Porcentaje", "Name"], ascending = False)
+    uniRetorno = unisRetorno.drop_duplicates(subset=["Name"], keep= "first")
+    uniR = uniRetorno.drop(['Mensaje', 'Language cerf score 2'], axis=1)
+    guarda = ["dg.guarin20@uniandes.edu.co", "Administration Bsc", "5", ["German","English"], uniR ]
+    return guarda
+
+def sacarTipo(unis, opciones):
+    name = []
+    for i in range(0, len(opciones)):
+        print("----")
+        nombre = opciones[i]
+        uni = unis[unis["Name"]== nombre]
+        n = uni["relation.name"].values[0].upper()
+        nombres = n.split(nombre.upper())
+        nombreRetorno = nombres[0].replace("-"," ")
+        name.append(nombreRetorno)
+        
+    return name
+def organizarRelation (n, o):
+    tipos = []
+    for i in range(0, len(o)):
+        nombre = n[i]
+        tipoO = o[i].upper()
+        tipo = tipoO.split(nombre.upper())
+        tipoRetorno = tipo[0].replace("-"," ")
+        tipos.append(tipoRetorno)
+    return tipos
+
+def obtenerLink(unis, opciones):
+    link = []
+    for i in range(0, len(opciones)):
+        nombre = opciones[i]
+        name = unis[unis["Name"]==nombre]
+        nID = name['Institution: ID'].values[0]
+        url = "https://uniandes.moveonca.com/publisher/institution/1/"
+        url2 = "/spa?relTypes=4&frmTypes=24|26|27|3|36&acadYears=&acadPeriods=&directions=2&defaultRelStatus=2&inst_int_settings_filter=2|4|5|6|7|8|9|10|11|12|13&acad_year_display=&acad_period_display=&document_types=1|5&restriction_types=1&restriction_id_filter=1&inst_document_types=1|5&inst_restriction_types=1&keyword=&country=10&institution_external=&degree_programme=&instance=2970&publisherId=1"
+        nID2 = str(nID).split(".")[0]
+        urlTotal = url + nID2 + url2
+        link.append(urlTotal)
+    return link
 
     

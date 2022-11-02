@@ -70,8 +70,15 @@
                 </div>
                 <div class="col ms-5 mt-0">
                     <form action="/" method="POST">
-
-                    
+					
+                    <h5 style="font-size:17px" class="mb-4">¿Que tipo de intecarmbio?</h5>
+					<label for="tipos">Escoge un tipo de estos:</label>
+					<select class="ms-2" name="tipo" id="tipo">
+                        {%for i in range(0, lenT)%}
+                            <option>{{tipos[i]}}</option>
+                        {%endfor%}
+                    </select>
+					<br>
                     <h5 style="font-size:17px" class="mb-4">¿A qué país desearías ir?</h5>
                     <label for="countries">Escoge un país:</label>
                     <select class="ms-2" name="country" id="country">
@@ -123,7 +130,9 @@
         <div class="container-fluid mt-4 ms-4">
             <canvas id="bar-chart" width="1300" height="450"></canvas>
         </div>
-        
+        <div id = "loader">
+			<img src = "../static/Loading_icon.gif" alt = "">
+		</div>
     
         <script>
             new Chart(document.getElementById("bar-chart"), {
