@@ -34,8 +34,39 @@ def index():
         #print(labels, file=sys.stderr)
         #print('----- Esta son values ----')
         #print(values, file=sys.stderr)
-
-        return render_template('index.html', labels=labels, values=values, lenI=len(institutions), institutions=institutions, lenC=len(labels), lenT=len(tipos), tipos=tipos)
+        u = ['../static/img/u1.jpg','../static/img/u2.jpg','../static/img/u5.jpg','../static/img/u6.jpg']
+        lenguajess = ['Abkhaz Language', 'Afrikaans', 'Arabic', 'Araona Language', 'Armenian',
+ 'Ayacucho Quechua', 'Aymara language', 'Ayoreo language', 'Baure Language',
+ 'Belarusian', 'Bengali', 'Bokmål', 'Bosnian', 'Bulgarian', 'Burmese',
+ 'Canichana Language', 'Cavineña Language', 'Cayubaba Language',
+ 'Chakobo language', 'Chiquitano Language', 'Croatian', 'Czech', 'Danish',
+ 'Dari', 'Dutch', 'English', 'Estonian', 'Filipino language', 'Finnish',
+ 'French', 'Georgian', 'German', 'Greek', 'Guarani', 'Guaraní language',
+ 'Guarayu Language', 'Gujarati', 'Haitian Creole', 'Haitian French', 'Hebrew',
+ 'Hindi', 'Hungarian', 'Icelandic', 'Indonesian', 'Irish', 'Italian',
+ 'Itene Language', 'Itonama Language', 'Jamaican English', 'Japanese',
+ 'Kallawaya', 'Kazakh', 'Khoe languages', 'Khoisan languages', 'Korean',
+ 'Kyrgyz', 'Languages of South Africa', 'Leco Language', 'Lithuanian', 'Lule',
+ 'Luxembourgish', 'Machiguenga language', 'Malay', 'Malaysian language',
+ 'Maltese', 'Modern Hebrew', 'Modern Standard Arabic', 'Movima language',
+ 'Moxos language', 'Mòoré Language', 'Māori language', 'Nama',
+ 'Northern Sotho language', 'Norwegian', 'Nynorsk', 'Pacahuara language',
+ 'Pashto', 'Pauserna Language', 'Persian', 'Polish', 'Portuguese',
+ 'Puquina Language', 'Quechuan languages', 'Reyesano Language', 'Romanian',
+ 'Romansh', 'Russian', 'Saami', 'Salvadoran Spanish', 'Sanskrit', 'Serbian',
+ 'Singapore English', 'Singaporean Mandarin', 'Sinhala Language',
+ 'Sirionó language', 'Slovak', 'Slovene language', 'Sotho language',
+ 'South African English', 'South African Sign Language',
+ 'Southern Ndebele language', 'Spanish', 'Standard Algerian Berber',
+ 'Standard Chinese', 'Standard Moroccan Amazigh', 'Swahili', 'Swati Language',
+ 'Swedish', 'Tacana Language', 'Tamil', 'Tapieté Language', 'Telugu', 'Thai',
+ 'Toromono language', 'Tsimané Language', 'Tsonga', 'Tswana', 'Turkish',
+ 'Ukrainian', 'Urdu', 'Uru language', 'Uzbek', 'Venda Language', 'Vietnamese',
+ 'Wichí Lhamtés Nocten Language', 'Xhosa', 'Yaminahua Language',
+ 'Yine language', 'Yuqui Language', 'Yuracaré language', 'Zulu']
+        lenU = [0,2]
+        lenL = len(lenguajess)
+        return render_template('index.html', labels=labels, values=values, lenI=len(institutions), institutions=institutions, lenC=len(labels), lenT=len(tipos), tipos=tipos, u=u, lenU = lenU, lenguajess = lenguajess, lenL = lenL)
     elif request.method == 'POST':
         full_filename1 = os.path.join(app.config['UPLOAD_FOLDER'], 'u1.jpg')
         full_filename2 = os.path.join(app.config['UPLOAD_FOLDER'], 'u5.jpg')
@@ -45,23 +76,15 @@ def index():
         country = request.form['country']
         tipo = request.form['tipo']
         programa = request.form['program']
-        lenguajes = []
-        if 'esItaliano' in request.form:
-            lenguajes.append('Italian')
-        if 'esIngles' in request.form:
-            lenguajes.append('English')
-        if 'esFrances' in request.form:
-            lenguajes.append('French')
-        if 'esPortugues' in request.form:
-            lenguajes.append('Portuguese')
-        if 'esAleman' in request.form:
-            lenguajes.append('German')
-
-        print('Esto son lenguajes')
+        lenguajes = request.form.getlist('lenguage[]')
+        print('Esto son lenguajes------------------------------------------------------------------')
         print(lenguajes)
+       
         promedio = int(request.form['promedio'])
         leng = json.dumps({"main": lenguajes})
-        return redirect(url_for("tops",country = country, tipo = tipo, programa = programa, leng = leng, promedio = promedio))
+        u = ['../static/img/u1.jpg','../static/img/u2.jpg','../static/img/u5.jpg','../static/img/u6.jpg']
+        lenU = 4
+        return redirect(url_for("tops",country = country, tipo = tipo, programa = programa, leng = leng, promedio = promedio, u= u, lenU = lenU))
        
 
 
@@ -74,9 +97,10 @@ def tops():
     global country 
     global promedio
     global guarda
+    global guardaCount
     if request.method == 'GET':
         tipo = request.args.get("tipo")
-        
+        guardaCount = 0
         programa = request.args.get("programa")
         
         leng = request.args.get("leng")
@@ -84,7 +108,7 @@ def tops():
         leng2 = ast.literal_eval(leng)
         
         lenguajes = leng2["main"]
-        
+        print("va")
         country = request.args.get("country")
        
         promedio = int(request.args.get("promedio"))
@@ -97,18 +121,35 @@ def tops():
         difi = l.sacarDificultad(programa)
         puestos = l.sacarPuestos(programa)
         r,contenedores, FiltrarSOI2, universidades, staywishes, SMILE, CINDA, F2 = l.man(country,programa,promedio,difi,puestos,lenguajes, "ALL")
-       
-        guarda=l.guardarUni("Universität des Saarlandes", 0.86,["dg.guarin20@uniandes.edu.co", "Administration Bsc", "5", ["German","English"], []],FiltrarSOI2)
+        print("guardando")
+        #guarda=l.guardarUni("Universität des Saarlandes", 0.86,["dg.guarin20@uniandes.edu.co", "Administration Bsc", "5", ["German","English"], []],FiltrarSOI2)
+        guarda = l.guardarUni("",0.86,["dg.guarin20@uniandes.edu.co", "Administration Bsc", "5", ["German","English"], []],FiltrarSOI2, guardaCount)
         unis = l.alistarDatos(FiltrarSOI2, universidades)
-        
-        
-        F3 = F2['Name'].values
-        recomendacionColl = l.SistemaRecomendacionCollab(staywishes, guarda, unis)
-        guardaN, guardaR, guardaP = l.definirElGuardado(guarda)
-        lenG = len(guardaN)
-        guarda2 = l.alistarDatos2(FiltrarSOI2, recomendacionColl, "Ingles" )
-        recomendacionContent = l.SistemRecomendacionContent(unis, guarda2)
-        organizado = l.organizar(recomendacionContent, guarda)
+        F3 = F2['Institution'].values
+        print("a ver")
+        print(unis.columns)
+        print(FiltrarSOI2.columns)
+        print("porfa")
+        if guardaCount == 0:
+            organizado = l.organizar(unis,guarda, guardaCount)
+            guardaN = ["No hay"]
+            guardaR = ["No hay"]
+            guardaP = ["No hay"]
+            lenG = len(guardaN)
+        else: 
+            recomendacionColl = l.SistemaRecomendacionCollab(staywishes, guarda, unis)
+            guardaN, guardaR, guardaP = l.definirElGuardado(guarda)
+            lenG = len(guardaN)
+            guarda2 = l.alistarDatos2(FiltrarSOI2, recomendacionColl, "Ingles" )
+            print("guarda")
+            print(unis)
+            recomendacionContent = l.SistemRecomendacionContent(unis, guarda2)
+            print("recomendacionnnnnnnnnnnnnnnnnnnnnnnnnn")
+            print(recomendacionContent)
+            print(guarda)
+            organizado = l.organizar(recomendacionContent, guarda)
+            print("organizadooooooooooooooooooooooooooo")
+            print(organizado)
         recomColl = organizado['Nombre'].values
         por = organizado["Porcentaje"].values
         porcentajeR = l.probabilidad(por)
@@ -124,6 +165,7 @@ def tops():
         full_filename3 = os.path.join(app.config['UPLOAD_FOLDER'], 'u6.jpg')
         full_filename4 = os.path.join(app.config['UPLOAD_FOLDER'], 'u4.jpg')
         a = [full_filename1,full_filename2,full_filename3,full_filename1]
+        valoresR = [0,3,6]
         #a = ['u3.jpg','u2.jpg','u3.jpg','u3.jpg']
         if len(r) != 0:
             for i in r:
@@ -138,12 +180,12 @@ def tops():
                 #else:
                  #   urls.append('NA')
         
-            return render_template('top3.html',opciones=opciones,lenO=len(opciones),country=country,contenedores=contenedores,urls=urls,a=a, recomendacionColl = recomColl, types = types, por = porcentajeR, relation = relation, linkRecom = linkRecom, lenG= lenG, guardaN = guardaN, guardaR = guardaR, guardaP= guardaP)
+            return render_template('top3.html',opciones=opciones,lenO=len(opciones),country=country,contenedores=contenedores,urls=urls,a=a, recomendacionColl = recomColl, types = types, por = porcentajeR, relation = relation, linkRecom = linkRecom, lenG= lenG, guardaN = guardaN, guardaR = guardaR, guardaP= guardaP, valoresR = valoresR)
     elif request.method == 'POST':
-        
+        guardaCount = 1
         file = open('translateProgramas.json',encoding="utf8")
         translatePrograms = json.load(file)
-       
+        
         
         #main(pCountry,pPrograma,pGpa,pPeso,pSeats)
         difi = l.sacarDificultad(programa)
@@ -153,17 +195,17 @@ def tops():
         print("revisar------")
         print(g)
         print("ojalaaa")
-        print(guarda)
-        guarda=l.guardarUni(g, 0.86, guarda, FiltrarSOI2)
+        
+        guarda=l.guardarUni(g, 0.86, guarda, FiltrarSOI2, guardaCount)
         unis = l.alistarDatos(FiltrarSOI2, universidades)
         
-        F3 = F2['Name'].values
+        F3 = F2['Institution'].values
         recomendacionColl = l.SistemaRecomendacionCollab(staywishes, guarda, unis)
         guardaN, guardaR, guardaP = l.definirElGuardado(guarda)
         lenG = len(guardaN)
         guarda2 = l.alistarDatos2(FiltrarSOI2, recomendacionColl, "Ingles" )
         recomendacionContent = l.SistemRecomendacionContent(unis, guarda2)
-        organizado = l.organizar(recomendacionContent, guarda)
+        organizado = l.organizar(recomendacionContent, guarda, guardaCount)
         recomColl = organizado['Nombre'].values
         por = organizado["Porcentaje"].values
         porcentajeR = l.probabilidad(por)
@@ -177,6 +219,7 @@ def tops():
         full_filename2 = os.path.join(app.config['UPLOAD_FOLDER'], 'u5.jpg')
         full_filename3 = os.path.join(app.config['UPLOAD_FOLDER'], 'u6.jpg')
         full_filename4 = os.path.join(app.config['UPLOAD_FOLDER'], 'u4.jpg')
+        valoresR = [0,3,6]
         a = [full_filename1,full_filename2,full_filename3,full_filename1]
         #a = ['u3.jpg','u2.jpg','u3.jpg','u3.jpg']
         if len(r) != 0:
@@ -192,7 +235,7 @@ def tops():
                 #else:
                  #   urls.append('NA')
         
-            return render_template('top3.html',opciones=opciones,lenO=len(opciones),country=country,contenedores=contenedores,urls=urls,a=a, recomendacionColl = recomColl, types = types, por = porcentajeR, relation = relation, linkRecom = linkRecom, lenG= lenG, guardaN = guardaN, guardaR = guardaR, guardaP= guardaP)
+            return render_template('top3.html',opciones=opciones,lenO=len(opciones),country=country,contenedores=contenedores,urls=urls,a=a, recomendacionColl = recomColl, types = types, por = porcentajeR, relation = relation, linkRecom = linkRecom, lenG= lenG, guardaN = guardaN, guardaR = guardaR, guardaP= guardaP, valoresR = valoresR)
     
 
 if __name__ == '__main__':
